@@ -1,0 +1,47 @@
+
+import pandas as pd
+import urllib.request
+import zipfile
+from io import BytesIO
+
+from sklearn.pipeline import Pipeline
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+
+
+@st.cache_resource
+def load_model():
+
+    dataset_url = (
+        "https://archive.ics.uci.edu/static/public/"
+        "228/sms+spam+collection.zip"
+    )
+
+    response = urllib.request.urlopen(dataset_url)
+    dataset_zip = zipfile.ZipFile(BytesIO(response.read()))
+
+    with dataset_zip.open("SMSSpamCollection") as file:
+        df = pd.read_csv(
+            file,
+            sep="\t",
+            names=["label", "message"]
+        )
+
+    X = df["message"]
+    y = df["label"].map({"ham": 0, "spam": 1})
+
+    model = Pipeline([
+        ("tfidf", TfidfVectorizer(
+            lowercase=True,
+            stop_words="english",
+            ngram_range=(1, 2)
+        )),
+        ("classifier", LogisticRegression(
+            max_iter=1000,
+            class_weight="balanced"
+        ))
+    ])
+
+    model.fit(X, y)
+
+    return model
