@@ -1,179 +1,453 @@
 
-import streamlit as st
-import joblib
 import os
+import joblib
+import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-# Page configuration
+from train_model import train_model
+
+# ----------------------------------
+# PAGE CONFIGURATION
+# ----------------------------------
+
 st.set_page_config(
-    page_title="AI SMS Spam Detector",
+    page_title="AI SMS Spam Detection",
     page_icon="📩",
-    layout="centered"
+    layout="wide"
 )
 
-# Custom CSS
+# ----------------------------------
+# CUSTOM CSS
+# ----------------------------------
+
 st.markdown("""
 <style>
-    .stApp {
-        background-color: #0B1220;
-        color: white;
-    }
 
-    .main-title {
-        text-align: center;
-        color: #22D3EE;
-        font-size: 36px;
-        font-weight: bold;
-    }
+.stApp {
+    background-color: #0B1220;
+    color: #FFFFFF;
+}
 
-    .subtitle {
-        text-align: center;
-        color: #CBD5E1;
-        font-size: 16px;
-    }
+.main-title {
+    color: #22D3EE;
+    font-size: 38px;
+    font-weight: bold;
+}
 
-    .result-box {
-        padding: 20px;
-        border-radius: 12px;
-        text-align: center;
-        margin-top: 20px;
-    }
+.subtitle {
+    color: #94A3B8;
+    font-size: 16px;
+}
 
-    .spam {
-        background-color: #451A1A;
-        border: 1px solid #EF4444;
-        color: #FCA5A5;
-    }
+.result-box {
+    padding: 22px;
+    border-radius: 12px;
+    text-align: center;
+    margin: 15px 0;
+}
 
-    .ham {
-        background-color: #123524;
-        border: 1px solid #22C55E;
-        color: #86EFAC;
-    }
+.spam {
+    background: #451A1A;
+    border: 1px solid #EF4444;
+}
+
+.ham {
+    background: #123524;
+    border: 1px solid #22C55E;
+}
+
+div[data-testid="stMetric"] {
+    background: #172337;
+    padding: 15px;
+    border-radius: 10px;
+}
+
+.stButton button {
+    background-color: #0891B2;
+    color: white;
+    border-radius: 8px;
+    font-weight: bold;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
 
-# Load trained model
+# ----------------------------------
+# MODEL LOADING
+# ----------------------------------
+
+MODEL_PATH = "models/spam_model.pkl"
+EVALUATION_PATH = "models/evaluation.pkl"
+
+
 @st.cache_resource
 def load_model():
-    if os.path.exists("spam_model.pkl"):
-        return joblib.load("spam_model.pkl")
+
+    if not os.path.exists(MODEL_PATH):
+
+        with st.spinner("Training AI model for first-time use..."):
+            train_model()
+
+    return joblib.load(MODEL_PATH)
+
+
+@st.cache_data
+def load_evaluation():
+
+    if os.path.exists(EVALUATION_PATH):
+        return joblib.load(EVALUATION_PATH)
+
     return None
 
 
-model = load_model()
+try:
+    model = load_model()
+    evaluation = load_evaluation()
+
+except Exception as error:
+    st.error(f"Unable to load the AI model: {error}")
+    st.stop()
 
 
-# Application heading
+# ----------------------------------
+# SESSION STATE
+# ----------------------------------
+
+if "history" not in st.session_state:
+    st.session_state.history = []
+
+
+# ----------------------------------
+# HEADER
+# ----------------------------------
+
 st.markdown(
-    '<div class="main-title">📩 AI SMS Spam Detector</div>',
+    '<div class="main-title">📩 AI SMS SPAM DETECTION</div>',
     unsafe_allow_html=True
 )
 
 st.markdown(
     '<div class="subtitle">'
-    'Intelligent SMS Classification using Machine Learning and NLP'
+    'Intelligent Message Classification using NLP and Machine Learning'
     '</div>',
     unsafe_allow_html=True
 )
 
 st.divider()
 
-st.subheader("🔍 Analyze Your SMS Message")
 
-st.write(
-    "Enter a message below to determine whether it is Spam "
-    "or a Legitimate message."
+# ----------------------------------
+# SIDEBAR
+# ----------------------------------
+
+st.sidebar.title("🛡️ SMS Security")
+
+page = st.sidebar.radio(
+    "Navigation",
+    [
+        "Message Detection",
+        "Model Performance",
+        "Prediction History",
+        "About Project"
+    ]
 )
 
-# SMS input
-message = st.text_area(
-    "Enter your SMS message",
-    placeholder="Example: Congratulations! You have won a free prize...",
-    height=130
+st.sidebar.divider()
+
+st.sidebar.success("AI Model Loaded Successfully")
+
+st.sidebar.caption(
+    "Algorithm: Logistic Regression"
 )
 
-# Prediction
-if st.button("🚀 Detect Spam", use_container_width=True):
+st.sidebar.caption(
+    "Feature Extraction: TF-IDF"
+)
 
-    if not message.strip():
-        st.warning("Please enter an SMS message.")
 
-    elif model is None:
-        st.error(
-            "Trained model not found. Please run train_model.py "
-            "first to download the dataset and train the model."
+# ----------------------------------
+# PAGE 1: MESSAGE DETECTION
+# ----------------------------------
+
+if page == "Message Detection":
+
+    st.header("🔍 SMS Message Analyzer")
+
+    st.write(
+        "Enter an SMS message to identify whether it is "
+        "Spam or Legitimate."
+    )
+
+    message = st.text_area(
+        "Enter your SMS message",
+        placeholder="Example: Congratulations! You won a free prize...",
+        height=140
+    )
+
+    if st.button("🚀 Analyze Message", use_container_width=True):
+
+        if not message.strip():
+
+            st.warning("Please enter a message.")
+
+        else:
+
+            prediction = model.predict([message])[0]
+
+            probabilities = model.predict_proba([message])[0]
+
+            classes = list(model.classes_)
+
+            spam_probability = probabilities[classes.index(1)] * 100
+
+            ham_probability = probabilities[classes.index(0)] * 100
+
+            if prediction == 1:
+
+                st.markdown(
+                    """
+                    <div class="result-box spam">
+                        <h2>🚨 SPAM MESSAGE DETECTED</h2>
+                        <p>This message is classified as Spam.</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+            else:
+
+                st.markdown(
+                    """
+                    <div class="result-box ham">
+                        <h2>✅ LEGITIMATE MESSAGE</h2>
+                        <p>This message is classified as Ham.</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.metric(
+                    "Spam Probability",
+                    f"{spam_probability:.2f}%"
+                )
+
+            with col2:
+                st.metric(
+                    "Legitimate Probability",
+                    f"{ham_probability:.2f}%"
+                )
+
+            st.subheader("Prediction Analysis")
+
+            st.progress(float(spam_probability / 100))
+
+            st.caption("Spam probability")
+
+            st.progress(float(ham_probability / 100))
+
+            st.caption("Legitimate probability")
+
+            st.session_state.history.insert(
+                0,
+                {
+                    "Message": message,
+                    "Prediction": (
+                        "Spam" if prediction == 1
+                        else "Legitimate"
+                    ),
+                    "Spam Probability": round(
+                        spam_probability, 2
+                    )
+                }
+            )
+
+
+    st.divider()
+
+    st.subheader("💡 Try Sample Messages")
+
+    examples = {
+        "Spam Example": (
+            "Congratulations! You have won a free prize. "
+            "Call now to claim your reward!"
+        ),
+
+        "Legitimate Example": (
+            "Hey, are we meeting today at 5 PM?"
+        )
+    }
+
+    for name, example in examples.items():
+
+        st.write(f"**{name}**")
+
+        st.code(example)
+
+
+# ----------------------------------
+# PAGE 2: MODEL PERFORMANCE
+# ----------------------------------
+
+elif page == "Model Performance":
+
+    st.header("📊 Model Performance Dashboard")
+
+    if evaluation:
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        col1.metric(
+            "Accuracy",
+            f"{evaluation['accuracy'] * 100:.2f}%"
+        )
+
+        col2.metric(
+            "Precision",
+            f"{evaluation['precision'] * 100:.2f}%"
+        )
+
+        col3.metric(
+            "Recall",
+            f"{evaluation['recall'] * 100:.2f}%"
+        )
+
+        col4.metric(
+            "F1-Score",
+            f"{evaluation['f1_score'] * 100:.2f}%"
+        )
+
+        st.divider()
+
+        st.subheader("Confusion Matrix")
+
+        cm = evaluation["confusion_matrix"]
+
+        fig, ax = plt.subplots(figsize=(7, 4))
+
+        sns.heatmap(
+            cm,
+            annot=True,
+            fmt="d",
+            cmap="Blues",
+            xticklabels=["Legitimate", "Spam"],
+            yticklabels=["Legitimate", "Spam"],
+            ax=ax
+        )
+
+        ax.set_xlabel("Predicted Label")
+        ax.set_ylabel("Actual Label")
+
+        st.pyplot(fig)
+        plt.close(fig)
+
+        col1, col2 = st.columns(2)
+
+        col1.metric(
+            "Training Samples",
+            evaluation["training_size"]
+        )
+
+        col2.metric(
+            "Testing Samples",
+            evaluation["testing_size"]
         )
 
     else:
-        prediction = model.predict([message])[0]
 
-        probabilities = model.predict_proba([message])[0]
-        confidence = max(probabilities) * 100
+        st.warning("Model evaluation data is unavailable.")
 
-        if prediction == 1:
-            st.markdown(
-                """
-                <div class="result-box spam">
-                    <h2>🚨 SPAM MESSAGE</h2>
-                    <p>This message is classified as Spam.</p>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
 
-        else:
-            st.markdown(
-                """
-                <div class="result-box ham">
-                    <h2>✅ LEGITIMATE MESSAGE</h2>
-                    <p>This message is classified as Ham.</p>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+# ----------------------------------
+# PAGE 3: PREDICTION HISTORY
+# ----------------------------------
 
-        st.metric(
-            "Prediction Confidence",
-            f"{confidence:.2f}%"
+elif page == "Prediction History":
+
+    st.header("📜 Prediction History")
+
+    if st.session_state.history:
+
+        history_df = pd.DataFrame(
+            st.session_state.history
         )
 
+        st.dataframe(
+            history_df,
+            use_container_width=True
+        )
+
+        if st.button("Clear History"):
+
+            st.session_state.history = []
+
+            st.rerun()
+
+    else:
+
+        st.info(
+            "No predictions yet. Analyze some SMS messages first."
+        )
+
+
+# ----------------------------------
+# PAGE 4: ABOUT PROJECT
+# ----------------------------------
+
+elif page == "About Project":
+
+    st.header("ℹ️ About This Project")
+
+    st.markdown("""
+    ### AI-Powered SMS Spam Detection
+
+    This project uses Natural Language Processing and
+    Machine Learning to classify SMS messages.
+
+    **Technology Stack**
+
+    - Python
+    - Natural Language Processing
+    - Scikit-learn
+    - TF-IDF Vectorization
+    - Logistic Regression
+    - Streamlit
+    - Pandas
+    - Matplotlib
+    - Seaborn
+
+    **Model Workflow**
+
+    1. SMS Dataset Collection
+    2. Text Preprocessing
+    3. TF-IDF Feature Extraction
+    4. Logistic Regression Training
+    5. Model Evaluation
+    6. SMS Classification
+
+    **Classification Categories**
+
+    - Spam
+    - Legitimate (Ham)
+    """)
+
+    st.info(
+        "This application is an educational machine learning "
+        "prototype. Predictions are not guaranteed to be correct."
+    )
+
+
+# ----------------------------------
+# FOOTER
+# ----------------------------------
+
 st.divider()
-
-# Example messages
-st.subheader("💡 Try Example Messages")
-
-st.write("**Example 1 – Spam:**")
-st.code(
-    "Congratulations! You have won a free prize. "
-    "Call now to claim your reward."
-)
-
-st.write("**Example 2 – Legitimate:**")
-st.code(
-    "Hey, are we meeting today at 5 PM?"
-)
-
-st.divider()
-
-# Project information
-st.subheader("ℹ️ About This Project")
-
-st.write("""
-This application uses Natural Language Processing (NLP)
-and Machine Learning to classify SMS messages.
-
-**Machine Learning Algorithm:** Logistic Regression
-
-**Feature Extraction:** TF-IDF Vectorization
-
-**Framework:** Scikit-learn and Streamlit
-
-**Classification Categories:**
-- Spam
-- Legitimate (Ham)
-""")
 
 st.caption(
-    "AI-Powered SMS Spam Detection | Python | NLP | Machine Learning"
+    "AI-Powered SMS Spam Detection | Python | NLP | Scikit-learn"
 )
